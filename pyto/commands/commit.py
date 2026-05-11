@@ -28,6 +28,9 @@ class GitWorkflow:
         self.repo_name = gitflow_config.get("repo_name", "")
         self.develop_branch = gitflow_config.get("develop_branch", "develop")
 
+        # 记住当前工作分支
+        self.working_branch = self.get_current_branch()
+
     def _load_config(self) -> dict:
         """Load configuration from pyto.toml."""
         config_path = Path("pyto.toml")
@@ -175,9 +178,8 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             self.run_command(["git", "checkout", self.develop_branch])
             self.run_command(["git", "pull", "origin", self.develop_branch])
 
-            # Go back to feature branch
-            current_branch = self.get_current_branch()
-            self.run_command(["git", "checkout", current_branch])
+            # Go back to working branch            
+            self.run_command(["git", "checkout", self.working_branch])
 
             # Merge develop into feature branch
             try:
