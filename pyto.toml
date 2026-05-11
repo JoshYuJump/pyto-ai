@@ -8,4 +8,4 @@ gitlab_port = "8008"
 repo_name = "yugu/yugu_yxpt"
 
 # 分支配置
-develop_branch = "prepare"  # GitFlow 中的 develop 分支对应 prepare
+develop_branch = "main"  # GitFlow 中的 develop 分支对应 prepare
