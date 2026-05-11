@@ -363,7 +363,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             self.console.print(f"⚠️  清理失败: {e}", style="yellow")
 
 
-def handle_commit_command(args) -> None:
+def commit(args) -> None:
     """Handle the commit command."""
     workflow = GitWorkflow()
 
