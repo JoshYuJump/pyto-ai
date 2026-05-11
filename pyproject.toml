@@ -6,9 +6,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "anthropic>=0.97.0",
-    "pydantic-ai>=1.86.1",
+    "ddgs>=9.14.1",
+    "pydantic-ai>=0.8.0",
     "python-dotenv>=1.2.2",
-    "textual>=8.2.4",
 ]
 
 [tool.pytest.ini_options]
@@ -23,4 +23,4 @@ dev = [
 ]
 
 [project.scripts]
-pyto-code = "pyto_code.__main__:main"
+pyto = "pyto.main:main"
