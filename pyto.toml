@@ -1,0 +1,11 @@
+# PyTo Code Configuration File
+# PyTo Code - A lightweight, extensible Python-first Code Agent framework
+
+[gitflow]
+# GitLab 配置
+gitlab_host = "192.168.1.54"
+gitlab_port = "8008"
+repo_name = "yugu/yugu_yxpt"
+
+# 分支配置
+develop_branch = "prepare"  # GitFlow 中的 develop 分支对应 prepare

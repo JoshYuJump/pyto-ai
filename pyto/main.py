@@ -11,34 +11,33 @@ env_path = Path(__file__).parent / ".env"
 load_dotenv(env_path)
 
 
-
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         prog="pyto",
-        description="PyTo Code - A lightweight, extensible Python-first Code Agent framework"
+        description="PyTo Code - A lightweight, extensible Python-first Code Agent framework",
     )
-    
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    
+
     # Add commit subcommand
     commit_parser = subparsers.add_parser(
-        "commit",
-        help="Submit code and create merge request (MR) workflow"
+        "commit", help="Submit code and create merge request (MR) workflow"
     )
     commit_parser.add_argument(
         "--skip-review",
         action="store_true",
-        help="Skip code review confirmation (not recommended)"
+        help="Skip code review confirmation (not recommended)",
     )
-    
+
     # Parse arguments
     args = parser.parse_args()
-    
+
     # Handle commands
     if args.command == "commit":
         try:
             from pyto.commands.commit import handle_commit_command
+
             handle_commit_command(args)
         except ImportError:
             print("❌ Error: pyto package not found. Please install the package first.")
