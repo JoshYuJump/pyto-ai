@@ -1,5 +1,5 @@
 """PyTo Code commands module."""
 
-from .commit import handle_commit_command
+from .commit import commit
 
-__all__ = ["handle_commit_command"]
+__all__ = ["commit"]

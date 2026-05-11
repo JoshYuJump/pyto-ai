@@ -36,9 +36,9 @@ def main():
     # Handle commands
     if args.command == "commit":
         try:
-            from pyto.commands.commit import handle_commit_command
+            from pyto.commands import commit
 
-            handle_commit_command(args)
+            commit(args)
         except ImportError:
             print("❌ Error: pyto package not found. Please install the package first.")
             print("Run: pip install -e .")

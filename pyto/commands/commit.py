@@ -23,10 +23,10 @@ class GitWorkflow:
 
         # 从配置文件读取设置
         gitflow_config = self.config.get("gitflow", {})
-        self.gitlab_host = gitflow_config.get("gitlab_host", "192.168.1.54")
-        self.gitlab_port = gitflow_config.get("gitlab_port", "8008")
-        self.repo_name = gitflow_config.get("repo_name", "yugu/yugu_yxpt")
-        self.develop_branch = gitflow_config.get("develop_branch", "prepare")
+        self.gitlab_host = gitflow_config.get("gitlab_host", "")
+        self.gitlab_port = gitflow_config.get("gitlab_port", "")
+        self.repo_name = gitflow_config.get("repo_name", "")
+        self.develop_branch = gitflow_config.get("develop_branch", "develop")
 
     def _load_config(self) -> dict:
         """Load configuration from pyto.toml."""
@@ -103,67 +103,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                 self.console.print(f"❌ Git 状态检查失败: {e.stderr}", style="red")
             sys.exit(1)
 
-    def code_review_checklist(self) -> bool:
-        """Display code review checklist and get confirmation."""
-        panel = Panel(
-            Text("CODE REVIEW CHECKLIST", style="bold blue"),
-            title="📋",
-            border_style="blue",
-        )
-        self.console.print(panel)
-
-        checklist = [
-            (
-                "代码质量检查",
-                [
-                    "代码符合项目编码规范",
-                    "函数和变量命名清晰",
-                    "注释充分且准确",
-                    "没有调试代码和 console.log",
-                    "没有硬编码的配置值",
-                ],
-            ),
-            (
-                "功能完整性检查",
-                [
-                    "功能实现符合需求",
-                    "边界条件已处理",
-                    "错误处理机制完善",
-                    "用户体验良好",
-                ],
-            ),
-            (
-                "测试覆盖检查",
-                [
-                    "单元测试已编写",
-                    "测试覆盖主要功能",
-                    "测试用例包含边界情况",
-                    "所有测试通过",
-                ],
-            ),
-            (
-                "安全性检查",
-                [
-                    "输入验证已实现",
-                    "权限控制正确",
-                    "敏感信息已保护",
-                    "SQL注入等安全问题已防范",
-                ],
-            ),
-            (
-                "性能检查",
-                ["数据库查询优化", "没有N+1查询问题", "缓存策略合理", "前端性能优化"],
-            ),
-        ]
-
-        for category, items in checklist:
-            self.console.print(f"\n🔍 {category}:", style="bold cyan")
-            for item in items:
-                self.console.print(f"  □ {item}")
-
-        self.console.print("\n" + "=" * 60)
-        return self.confirm("请逐项检查上述清单，确认无误后继续")
-
+    
     def stage_changes(self) -> bool:
         """Stage changes for commit."""
         self.console.print("\n📁 检查当前状态...", style="cyan")
@@ -363,7 +303,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             self.console.print(f"⚠️  清理失败: {e}", style="yellow")
 
 
-def handle_commit_command(args) -> None:
+def commit(args) -> None:
     """Handle the commit command."""
     workflow = GitWorkflow()
 
