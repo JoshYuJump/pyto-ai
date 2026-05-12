@@ -185,7 +185,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
         """Run a command and return the result."""
         try:
             res: CompletedProcess = subprocess.run(
-                cmd, capture_output=True, text=True, check=check
+                cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', check=check
             )
             return res
         except subprocess.CalledProcessError as e:
