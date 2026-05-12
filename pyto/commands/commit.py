@@ -1,31 +1,35 @@
 """Git commit and merge request workflow implementation."""
 
+import asyncio
 import json
 import os
 import re
 import subprocess
 import sys
-import toml
 import webbrowser
-
-
 from datetime import datetime, timedelta
 from pathlib import Path
 from subprocess import CompletedProcess
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 
+import toml
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from rich.console import Console
 from rich.panel import Panel
-from rich.text import Text
 from rich.prompt import Confirm
+from rich.text import Text
 
 
 class CommitMessage(BaseModel):
-    commit_message: str = Field(description="Git commit message")
+    message: str = Field(description="Git commit message")
+
+
+class MRContent(BaseModel):
+    title: str = Field(description="Merge request title")
+    description: str = Field(description="Merge request description")
 
 
 class GitWorkflow:
@@ -146,6 +150,49 @@ feat(auth): 添加用户认证功能
 请生成简洁、准确、符合规范的提交信息。""",
         )
 
+        self.mr_agent = Agent(
+            model,
+            output_type=MRContent,
+            system_prompt="""你是一个专业的 Merge Request 内容生成助手。请根据提供的代码变更信息和提交记录生成简洁的标题和详细的描述。
+
+MR 标题要求：
+- 简洁明了，不超过60个字符
+- 准确概括本次变更的主要内容
+- 使用中文生成标题
+- 避免过于技术化的术语
+- 突出变更的价值和目的
+
+MR 描述要求：
+- 详细说明变更的背景和目的
+- 列出主要的变更内容和功能
+- 说明变更的影响范围
+- 提供测试建议或验证方法
+- 使用中文生成描述
+- 格式清晰，易于阅读
+- 使用 Markdown 格式
+
+描述结构建议：
+## 变更背景
+说明为什么需要这个变更
+
+## 主要变更
+列出具体的功能或修改内容
+
+## 影响范围
+说明哪些模块或功能会受到影响
+
+## 测试建议
+提供如何验证变更效果的建议
+
+示例标题：
+- 添加用户认证功能
+- 修复登录页面显示问题
+- 优化数据库查询性能
+- 重构订单处理逻辑
+
+请同时生成简洁准确的标题和详细结构化的描述。""",
+        )
+
     def _load_config(self) -> dict:
         """Load configuration from pyto.toml."""
         config_path = Path("pyto.toml")
@@ -185,7 +232,12 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
         """Run a command and return the result."""
         try:
             res: CompletedProcess = subprocess.run(
-                cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', check=check
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=check,
             )
             return res
         except subprocess.CalledProcessError as e:
@@ -540,7 +592,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             # Generate commit message using LLM
             result = await self.commit_agent.run(context)
             print(result.output)
-            commit_msg = result.output.commit_message
+            commit_msg = result.output.message
 
             # Display generated message
             self.console.print("\n� AI 生成的提交信息:", style="cyan")
@@ -587,9 +639,169 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
 
     def get_commit_message(self) -> str:
         """Get commit message (now using LLM generation)."""
-        import asyncio
 
         return asyncio.run(self.generate_commit_message())
+
+    async def generate_mr_content(self, branch: str) -> Tuple[str, str]:
+        """Generate MR title and description using LLM based on branch changes and commit history."""
+        self.console.print("\n🤖 正在分析分支变更并生成 MR 标题和描述...", style="cyan")
+
+        try:
+            # Get git diff between branches
+            diff_result = self.run_command(
+                [
+                    "git",
+                    "diff",
+                    "--stat",
+                    f"origin/{self.develop_branch}...origin/{branch}",
+                ]
+            )
+            detailed_diff = self.run_command(
+                ["git", "diff", f"origin/{self.develop_branch}...origin/{branch}"]
+            )
+
+            # Get list of changed files
+            files_result = self.run_command(
+                [
+                    "git",
+                    "diff",
+                    "--name-only",
+                    f"origin/{self.develop_branch}...origin/{branch}",
+                ]
+            )
+            changed_files = (
+                files_result.stdout.strip().split("\n")
+                if files_result.stdout.strip()
+                else []
+            )
+
+            # Get detailed commit messages for context
+            try:
+                commit_log = self.run_command(
+                    [
+                        "git",
+                        "log",
+                        "--pretty=format:%h %s",
+                        "--no-merges",
+                        f"origin/{self.develop_branch}..origin/{branch}",
+                    ]
+                )
+                commit_messages = commit_log.stdout.strip()
+
+                # Get detailed commit info
+                detailed_commits = self.run_command(
+                    [
+                        "git",
+                        "log",
+                        "--pretty=format:%h%n%s%n%b",
+                        "--no-merges",
+                        f"origin/{self.develop_branch}..origin/{branch}",
+                    ]
+                )
+                detailed_commit_info = detailed_commits.stdout.strip()
+            except subprocess.CalledProcessError:
+                commit_messages = ""
+                detailed_commit_info = ""
+
+            # Prepare context for LLM
+            context = f"""
+分支名称: {branch}
+目标分支: {self.develop_branch}
+
+代码变更统计：
+{diff_result.stdout}
+
+变更文件列表：
+{chr(10).join(changed_files)}
+
+提交记录：
+{commit_messages}
+
+详细提交信息：
+{detailed_commit_info[:2000]}
+
+详细变更内容：
+{detailed_diff.stdout[:2000]}  # 限制长度避免token过多
+
+请基于以上分支变更信息同时生成简洁的标题和详细的描述。
+"""
+
+            # Generate MR content using LLM
+            result = await self.mr_agent.run(context)
+            mr_title = result.output.mr_title
+            mr_description = result.output.mr_description
+
+            # Display generated title and description
+            self.console.print("\n🤖 AI 生成的 MR 标题:", style="cyan")
+            title_panel = Panel(mr_title, title="标题", border_style="green")
+            self.console.print(title_panel)
+
+            self.console.print("\n🤖 AI 生成的 MR 描述:", style="cyan")
+            desc_panel = Panel(mr_description, title="描述", border_style="green")
+            self.console.print(desc_panel)
+
+            # Ask for user confirmation
+            if self.confirm("是否使用 AI 生成的 MR 标题和描述？"):
+                return mr_title, mr_description
+            else:
+                return self._fallback_mr_content(branch)
+
+        except Exception as e:
+            self.console.print(f"⚠️  AI 生成 MR 内容失败: {e}", style="yellow")
+            self.console.print("回退到手动输入模式...", style="yellow")
+            return self._fallback_mr_content(branch)
+
+    def _fallback_mr_content(self, branch: str) -> Tuple[str, str]:
+        """Fallback method for manual MR title and description input."""
+        self.console.print("\n📝 MR 内容规范:", style="cyan")
+        self.console.print("标题要求:")
+        self.console.print("- 简洁明了，不超过60个字符")
+        self.console.print("- 准确概括变更内容")
+        self.console.print("- 使用中文标题")
+        self.console.print("描述要求:")
+        self.console.print("- 详细说明变更的背景和目的")
+        self.console.print("- 列出主要的变更内容和功能")
+        self.console.print("- 说明变更的影响范围")
+        self.console.print("- 提供测试建议或验证方法")
+        self.console.print("- 使用 Markdown 格式")
+
+        while True:
+            # Get title
+            title = input("\n请输入 MR 标题: ").strip()
+            if not title:
+                self.console.print("❌ MR 标题不能为空", style="red")
+                continue
+
+            # Get description
+            self.console.print("\n请输入 MR 描述（支持 Markdown，输入 'END' 结束）:")
+            lines = []
+            while True:
+                line = input()
+                if line.strip() == "END":
+                    break
+                lines.append(line)
+
+            description = "\n".join(lines).strip()
+            if not description:
+                self.console.print("❌ MR 描述不能为空", style="red")
+                continue
+
+            # Preview
+            self.console.print("\n📋 MR 内容预览:", style="cyan")
+            title_panel = Panel(title, title="标题预览", border_style="yellow")
+            self.console.print(title_panel)
+
+            desc_panel = Panel(description, title="描述预览", border_style="yellow")
+            self.console.print(desc_panel)
+
+            if self.confirm("确认使用此 MR 标题和描述？"):
+                return title, description
+            self.console.print("请重新输入...", style="yellow")
+
+    def get_mr_content(self, branch: str) -> Tuple[str, str]:
+        """Get MR title and description (now using LLM generation)."""
+
+        return asyncio.run(self.generate_mr_content(branch))
 
     def commit_changes(self, message: str) -> bool:
         """Commit staged changes."""
@@ -674,13 +886,13 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                 return None
 
         try:
-            # Create MR with develop as target branch
-            title = input("请输入 MR 标题: ").strip() or branch
+            # Generate MR title and description using LLM in one request
+            title, description = self.get_mr_content(branch)
+
             cmd = [
                 "glab",
                 "mr",
                 "create",
-                "--fill",
                 "--repo",
                 self.repo_name,
                 "--target-branch",
@@ -689,13 +901,14 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                 branch,
                 "--title",
                 title,
+                "--description",
+                description,
                 "-y",
             ]
 
             result = self.run_command(cmd)
 
             # Extract MR number from output
-            import re
 
             mr_match = re.search(r"!(\d+)", result.stdout)
             if mr_match:
