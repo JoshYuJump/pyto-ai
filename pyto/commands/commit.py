@@ -1,17 +1,31 @@
 """Git commit and merge request workflow implementation."""
 
+import json
 import os
+import re
 import subprocess
 import sys
-import webbrowser
-from pathlib import Path
-from typing import Optional
-
 import toml
+import webbrowser
+
+
+from datetime import datetime, timedelta
+from pathlib import Path
+from subprocess import CompletedProcess
+from typing import Optional, Tuple, List, Dict, Any
+
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 from rich.prompt import Confirm
+
+
+class CommitMessage(BaseModel):
+    commit_message: str = Field(description="Git commit message")
 
 
 class GitWorkflow:
@@ -20,6 +34,7 @@ class GitWorkflow:
     def __init__(self):
         self.console = Console()
         self.config = self._load_config()
+        self.settings = self._load_settings()
 
         # 从配置文件读取设置
         gitflow_config = self.config.get("gitflow", {})
@@ -30,6 +45,106 @@ class GitWorkflow:
 
         # 记住当前工作分支
         self.working_branch = self.get_current_branch()
+
+        # 分支差异检查的阈值配置
+        self.divergence_threshold = 20  # A > 20 表示 divergence 较大
+        self.file_change_threshold = 10  # 同目录下超过10个文件改动
+        self.long_lived_branch_days = 14  # 长期分支阈值：2周
+
+        # 设置 LLM 代理用于生成提交信息
+        self._setup_commit_agent()
+
+    def _get_settings_path(self) -> Path:
+        """Get the path to the settings.json file."""
+        home_dir = Path.home()
+        pyto_dir = home_dir / ".pyto"
+        pyto_dir.mkdir(exist_ok=True)
+        return pyto_dir / "settings.json"
+
+    def _load_settings(self) -> Dict[str, Any]:
+        """Load LLM settings from ~/.pyto/settings.json."""
+        settings_path = self._get_settings_path()
+        self.console.print(f"Loading settings from: {settings_path}", style="cyan")
+
+        if not settings_path.exists():
+            self.console.print(
+                "⚠️  未找到 ~/.pyto/settings.json 配置文件", style="yellow"
+            )
+            self.console.print("正在创建默认配置文件...", style="cyan")
+            self._create_default_settings(settings_path)
+            self.console.print(
+                "✅ 已创建 ~/.pyto/settings.json 配置文件", style="green"
+            )
+            self.console.print("📝 请根据需要更新配置文件中的 LLM 设置", style="yellow")
+
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+
+            # Store settings for provider configuration
+            self.llm_settings = settings
+
+            return settings
+        except Exception as e:
+            self.console.print(f"❌ 读取设置文件失败: {e}", style="red")
+            self.console.print("使用默认设置", style="yellow")
+            return {}
+
+    def _create_default_settings(self, settings_path: Path) -> None:
+        """Create default ~/.pyto/settings.json configuration file."""
+        default_settings = {
+            "env": {
+                "ANTHROPIC_AUTH_TOKEN": "your-anthropic-token-here",
+                "ANTHROPIC_BASE_URL": "your-anthropic-base-url-here",
+            },
+            "model": "minimax-m2.7",
+        }
+
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(default_settings, f, indent=2, ensure_ascii=False)
+
+    def _setup_commit_agent(self):
+        """Setup commit message generation agent using settings."""
+        # Get model from settings, default to gpt-4o-mini
+        model_name: str = self.settings.get("model", "gpt-4o-mini")
+
+        # Get environment settings
+        env_settings = self.settings.get("env", {})
+
+        # Anthropic provider
+        api_key = env_settings.get("ANTHROPIC_AUTH_TOKEN")
+        base_url = env_settings.get("ANTHROPIC_BASE_URL")
+
+        if api_key:
+            provider = AnthropicProvider(api_key=api_key, base_url=base_url)
+        else:
+            provider = None
+
+        self.console.print(f"🤖 使用模型: {model_name}", style="cyan")
+        model = AnthropicModel(model_name, provider=provider)
+        # Create agent with provider if available
+
+        self.commit_agent = Agent(
+            model,
+            output_type=CommitMessage,
+            system_prompt="""你是一个专业的 Git 提交信息生成助手。请根据提供的代码变更信息生成符合规范的提交信息。
+
+提交信息格式规范：
+- 类型(type): feat, fix, refactor, docs, style, test, chore
+- 范围(scope): 可选，说明影响的模块或组件
+- 主题(subject): 简洁描述，不超过50个字符
+- 正文(body): 可选，详细描述变更内容和原因
+- 使用中文生成提交信息
+
+示例格式：
+feat(auth): 添加用户认证功能
+
+- 实现JWT token验证
+- 添加登录/注册接口
+- 集成权限中间件
+
+请生成简洁、准确、符合规范的提交信息。""",
+        )
 
     def _load_config(self) -> dict:
         """Load configuration from pyto.toml."""
@@ -66,18 +181,18 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
 """
         config_path.write_text(default_config, encoding="utf-8")
 
-    def run_command(
-        self, cmd: list[str], check: bool = True
-    ) -> subprocess.CompletedProcess:
+    def run_command(self, cmd: list[str], check: bool = True) -> CompletedProcess:
         """Run a command and return the result."""
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=check)
-            return result
+            res: CompletedProcess = subprocess.run(
+                cmd, capture_output=True, text=True, check=check
+            )
+            return res
         except subprocess.CalledProcessError as e:
             self.console.print(
                 f"❌ Error running command: {' '.join(cmd)}", style="red"
             )
-            self.console.print(f"STDERR: {e.stderr}", style="red")
+            self.console.print(f"STDERR: {res.stderr}", style="red")
             raise
 
     def confirm(self, message: str) -> bool:
@@ -88,6 +203,269 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
         """Get the current git branch name."""
         result = self.run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"])
         return result.stdout.strip()
+
+    def get_commit_divergence(
+        self, branch: str, target_branch: str = None
+    ) -> Tuple[int, int]:
+        """Get commit divergence between branches.
+
+        Returns:
+            Tuple[int, int]: (A, B) where A = target_branch commits ahead of branch,
+                           B = branch commits ahead of target_branch
+        """
+        if target_branch is None:
+            target_branch = self.develop_branch
+
+        try:
+            # Fetch latest changes first
+            self.run_command(["git", "fetch", "origin"])
+
+            # Get commit count divergence
+            cmd = [
+                "git",
+                "rev-list",
+                "--left-right",
+                "--count",
+                f"origin/{target_branch}...origin/{branch}",
+            ]
+            result = self.run_command(cmd)
+
+            counts = result.stdout.strip().split()
+            if len(counts) == 2:
+                return int(counts[0]), int(counts[1])
+            return 0, 0
+
+        except subprocess.CalledProcessError:
+            self.console.print("❌ 无法获取分支差异信息", style="red")
+            return 0, 0
+
+    def get_changed_files(self, branch: str, target_branch: str = None) -> List[str]:
+        """Get list of changed files between branches."""
+        if target_branch is None:
+            target_branch = self.develop_branch
+
+        try:
+            # Fetch latest changes first
+            self.run_command(["git", "fetch", "origin"])
+
+            cmd = [
+                "git",
+                "diff",
+                "--name-only",
+                f"origin/{target_branch}...origin/{branch}",
+            ]
+            result = self.run_command(cmd)
+
+            files = [f.strip() for f in result.stdout.split("\n") if f.strip()]
+            return files
+
+        except subprocess.CalledProcessError:
+            self.console.print("❌ 无法获取改动文件列表", style="red")
+            return []
+
+    def analyze_file_changes(self, files: List[str]) -> dict:
+        """Analyze file changes to determine conflict probability."""
+        analysis = {
+            "total_files": len(files),
+            "core_modules": 0,
+            "backend_files": 0,
+            "migration_files": 0,
+            "directory_changes": {},
+            "high_conflict_risk": False,
+        }
+
+        # Define patterns for core modules and high-risk files
+        core_patterns = [
+            r"^src/core/",
+            r"^lib/core/",
+            r"^app/core/",
+            r"^models/",
+            r"^services/",
+            r"^api/",
+            r"^config/",
+            r"^database/",
+        ]
+
+        backend_patterns = [
+            r"\.py$",
+            r"\.js$",
+            r"\.ts$",
+            r"\.go$",
+            r"\.java$",
+            r"^backend/",
+            r"^server/",
+            r"^app/",
+        ]
+
+        migration_patterns = [r"migration", r"schema", r"database", r"seed"]
+
+        for file_path in files:
+            # Check for core modules
+            for pattern in core_patterns:
+                if re.search(pattern, file_path, re.IGNORECASE):
+                    analysis["core_modules"] += 1
+                    analysis["high_conflict_risk"] = True
+                    break
+
+            # Check for backend files
+            for pattern in backend_patterns:
+                if re.search(pattern, file_path):
+                    analysis["backend_files"] += 1
+                    break
+
+            # Check for migration files
+            for pattern in migration_patterns:
+                if re.search(pattern, file_path, re.IGNORECASE):
+                    analysis["migration_files"] += 1
+                    analysis["high_conflict_risk"] = True
+                    break
+
+            # Track directory changes
+            directory = Path(file_path).parent.as_posix()
+            analysis["directory_changes"][directory] = (
+                analysis["directory_changes"].get(directory, 0) + 1
+            )
+
+        # Check if any directory has too many changes
+        for count in analysis["directory_changes"].values():
+            if count > self.file_change_threshold:
+                analysis["high_conflict_risk"] = True
+                break
+
+        return analysis
+
+    def get_branch_age_days(self, branch: str) -> int:
+        """Get branch age in days since first commit."""
+        try:
+            # Get the first commit date of the branch
+            cmd = ["git", "log", "--reverse", "--format=%ci", f"origin/{branch}"]
+            result = self.run_command(cmd)
+
+            if result.stdout.strip():
+                first_commit_date = result.stdout.split("\n")[0].strip()
+                first_date = datetime.strptime(first_commit_date.split()[0], "%Y-%m-%d")
+                age_days = (datetime.now() - first_date).days
+                return age_days
+
+            return 0
+
+        except (subprocess.CalledProcessError, ValueError):
+            return 0
+
+    def should_sync_develop_branch(self, branch: str = None) -> Tuple[bool, dict]:
+        """Determine if should sync with develop branch before MR.
+
+        Returns:
+            Tuple[bool, dict]: (should_sync, analysis_details)
+        """
+        if branch is None:
+            branch = self.working_branch
+
+        # Skip if on develop branch itself
+        if branch == self.develop_branch:
+            return False, {"reason": "already_on_develop"}
+
+        self.console.print(
+            f"\n🔍 分析分支 {branch} 与 {self.develop_branch} 的差异...", style="cyan"
+        )
+
+        # Get commit divergence
+        target_ahead, branch_ahead = self.get_commit_divergence(
+            branch, self.develop_branch
+        )
+
+        # Get changed files
+        changed_files = self.get_changed_files(branch, self.develop_branch)
+        file_analysis = self.analyze_file_changes(changed_files)
+
+        # Get branch age
+        branch_age = self.get_branch_age_days(branch)
+
+        # Decision logic
+        should_sync = False
+        reasons = []
+
+        # Check divergence threshold
+        if target_ahead > self.divergence_threshold:
+            should_sync = True
+            reasons.append(
+                f"divergence较大 ({target_ahead} > {self.divergence_threshold})"
+            )
+
+        # Check file change patterns
+        if file_analysis["high_conflict_risk"]:
+            should_sync = True
+            reasons.append("涉及核心模块或大量同文件修改")
+
+        # Check branch age
+        if branch_age > self.long_lived_branch_days:
+            should_sync = True
+            reasons.append(
+                f"长期分支 ({branch_age}天 > {self.long_lived_branch_days}天)"
+            )
+
+        # Check for migration files
+        if file_analysis["migration_files"] > 0:
+            should_sync = True
+            reasons.append("包含数据库迁移文件")
+
+        analysis = {
+            "target_ahead": target_ahead,
+            "branch_ahead": branch_ahead,
+            "changed_files_count": len(changed_files),
+            "file_analysis": file_analysis,
+            "branch_age_days": branch_age,
+            "should_sync": should_sync,
+            "reasons": reasons,
+        }
+
+        return should_sync, analysis
+
+    def display_divergence_analysis(self, analysis: dict) -> None:
+        """Display branch divergence analysis results."""
+        self.console.print("\n📊 分支差异分析结果:", style="bold cyan")
+        self.console.print("=" * 50, style="blue")
+
+        # Commit divergence
+        self.console.print(f"📈 提交差异:", style="yellow")
+        self.console.print(
+            f"  • {self.develop_branch} 领先: {analysis['target_ahead']} 个提交"
+        )
+        self.console.print(f"  • 当前分支领先: {analysis['branch_ahead']} 个提交")
+
+        # File changes
+        file_analysis = analysis["file_analysis"]
+        self.console.print(f"\n📁 文件改动:", style="yellow")
+        self.console.print(f"  • 总计改动文件: {analysis['changed_files_count']}")
+        self.console.print(f"  • 核心模块文件: {file_analysis['core_modules']}")
+        self.console.print(f"  • 后端文件: {file_analysis['backend_files']}")
+        self.console.print(f"  • 迁移文件: {file_analysis['migration_files']}")
+
+        # Directory changes
+        if file_analysis["directory_changes"]:
+            self.console.print(f"\n📂 目录改动分布:", style="yellow")
+            for dir_path, count in file_analysis["directory_changes"].items():
+                if count > 3:  # Only show directories with significant changes
+                    risk_indicator = (
+                        "⚠️" if count > self.file_change_threshold else "✅"
+                    )
+                    self.console.print(f"  {risk_indicator} {dir_path}: {count} 个文件")
+
+        # Branch age
+        self.console.print(f"\n📅 分支信息:", style="yellow")
+        self.console.print(f"  • 分支存在时间: {analysis['branch_age_days']} 天")
+
+        # Recommendation
+        if analysis["should_sync"]:
+            self.console.print(
+                f"\n🔄 建议同步 {self.develop_branch} 分支:", style="bold red"
+            )
+            for reason in analysis["reasons"]:
+                self.console.print(f"  • {reason}")
+        else:
+            self.console.print(f"\n✅ 可以直接提交 MR，无需同步", style="bold green")
+
+        self.console.print("=" * 50, style="blue")
 
     def check_git_status(self) -> bool:
         """Check if there are changes to commit."""
@@ -106,7 +484,6 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                 self.console.print(f"❌ Git 状态检查失败: {e.stderr}", style="red")
             sys.exit(1)
 
-    
     def stage_changes(self) -> bool:
         """Stage changes for commit."""
         self.console.print("\n📁 检查当前状态...", style="cyan")
@@ -129,9 +506,61 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
         self.console.print("✅ 文件已暂存", style="green")
         return True
 
-    def get_commit_message(self) -> str:
-        """Get commit message from user."""
-        self.console.print("\n📝 提交信息规范:", style="cyan")
+    async def generate_commit_message(self) -> str:
+        """Generate commit message using LLM based on git changes."""
+        self.console.print("\n🤖 正在分析代码变更并生成提交信息...", style="cyan")
+
+        try:
+            # Get git diff to analyze changes
+            diff_result = self.run_command(["git", "diff", "--cached", "--stat"])
+            detailed_diff = self.run_command(["git", "diff", "--cached"])
+
+            # Get list of changed files
+            files_result = self.run_command(["git", "diff", "--cached", "--name-only"])
+            changed_files = (
+                files_result.stdout.strip().split("\n")
+                if files_result.stdout.strip()
+                else []
+            )
+
+            # Prepare context for LLM
+            context = f"""
+代码变更统计：
+{diff_result.stdout}
+
+变更文件列表：
+{chr(10).join(changed_files)}
+
+详细变更内容：
+{detailed_diff.stdout[:2000]}  # 限制长度避免token过多
+
+请基于以上代码变更生成符合规范的Git提交信息。
+"""
+
+            # Generate commit message using LLM
+            result = await self.commit_agent.run(context)
+            print(result.output)
+            commit_msg = result.output.commit_message
+
+            # Display generated message
+            self.console.print("\n� AI 生成的提交信息:", style="cyan")
+            panel = Panel(commit_msg, title="AI 生成", border_style="green")
+            self.console.print(panel)
+
+            # Ask for user confirmation
+            if self.confirm("是否使用 AI 生成的提交信息？"):
+                return commit_msg
+            else:
+                return self._fallback_commit_message()
+
+        except Exception as e:
+            self.console.print(f"⚠️  AI 生成提交信息失败: {e}", style="yellow")
+            self.console.print("回退到手动输入模式...", style="yellow")
+            return self._fallback_commit_message()
+
+    def _fallback_commit_message(self) -> str:
+        """Fallback method for manual commit message input."""
+        self.console.print("\n�📝 提交信息规范:", style="cyan")
         self.console.print("格式: <type>(<scope>): <subject>")
         self.console.print("类型: feat, fix, refactor, docs, style, test, chore")
         self.console.print("示例: feat(auth): 添加用户认证功能")
@@ -156,6 +585,12 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                 return commit_msg
             self.console.print("请重新输入...", style="yellow")
 
+    def get_commit_message(self) -> str:
+        """Get commit message (now using LLM generation)."""
+        import asyncio
+
+        return asyncio.run(self.generate_commit_message())
+
     def commit_changes(self, message: str) -> bool:
         """Commit staged changes."""
         try:
@@ -178,7 +613,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             self.run_command(["git", "checkout", self.develop_branch])
             self.run_command(["git", "pull", "origin", self.develop_branch])
 
-            # Go back to working branch            
+            # Go back to working branch
             self.run_command(["git", "checkout", self.working_branch])
 
             # Merge develop into feature branch
@@ -328,13 +763,27 @@ def commit(args) -> None:
         workflow.console.print("❌ 提交失败，终止流程", style="red")
         sys.exit(1)
 
-    # Step 4: Sync with develop branch
-    if not workflow.sync_develop_branch():
-        workflow.console.print("❌ 同步失败，终止流程", style="red")
-        sys.exit(1)
+    # Step 4: Check branch divergence and decide on sync strategy
+    current_branch = workflow.get_current_branch()
+    should_sync, analysis = workflow.should_sync_develop_branch(current_branch)
+
+    # Display analysis results
+    workflow.display_divergence_analysis(analysis)
+
+    # Make sync decision based on analysis
+    if should_sync:
+        if not workflow.confirm(
+            f"根据分析结果，是否同步 {workflow.develop_branch} 分支？"
+        ):
+            workflow.console.print("⚠️  跳过同步，继续后续流程", style="yellow")
+        else:
+            if not workflow.sync_develop_branch():
+                workflow.console.print("❌ 同步失败，终止流程", style="red")
+                sys.exit(1)
+    else:
+        workflow.console.print(f"✅ 跳过同步，直接提交 MR", style="green")
 
     # Step 5: Push to remote
-    current_branch = workflow.get_current_branch()
     if not workflow.push_to_remote(current_branch):
         workflow.console.print("❌ 推送失败，终止流程", style="red")
         sys.exit(1)
