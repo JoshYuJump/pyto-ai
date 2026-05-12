@@ -49,6 +49,10 @@ class GitWorkflow:
         self.gitlab_port = gitflow_config.get("gitlab_port", "")
         self.repo_name = gitflow_config.get("repo_name", "")
         self.develop_branch = gitflow_config.get("develop_branch", "develop")
+        
+        # 读取语言配置
+        general_config = self.config.get("general", {})
+        self.language = general_config.get("language", "zh")  # 默认中文
 
         # 记住当前工作分支
         self.working_branch = self.get_current_branch()
@@ -110,31 +114,28 @@ class GitWorkflow:
         with open(settings_path, "w", encoding="utf-8") as f:
             json.dump(default_settings, f, indent=2, ensure_ascii=False)
 
-    def _setup_commit_agent(self):
-        """Setup commit message generation agent using settings."""
-        # Get model from settings, default to gpt-4o-mini
-        model_name: str = self.settings.get("model", "gpt-4o-mini")
+    def _get_commit_prompt(self) -> str:
+        """Get commit message generation prompt based on language configuration."""
+        if self.language == "en":
+            return """You are a professional Git commit message generation assistant. Please generate standardized commit messages based on the provided code change information.
 
-        # Get environment settings
-        env_settings = self.settings.get("env", {})
+Commit message format:
+- Type(type): feat, fix, refactor, docs, style, test, chore
+- Scope(scope): Optional, describe the affected module or component
+- Subject(subject): Concise description, not exceeding 50 characters
+- Body(body): Optional, detailed description of changes and reasons
+- Generate commit messages in English
 
-        # Anthropic provider
-        api_key = env_settings.get("ANTHROPIC_AUTH_TOKEN")
-        base_url = env_settings.get("ANTHROPIC_BASE_URL")
+Example format:
+feat(auth): add user authentication functionality
 
-        if api_key:
-            provider = AnthropicProvider(api_key=api_key, base_url=base_url)
-        else:
-            provider = None
+- Implement JWT token validation
+- Add login/registration endpoints
+- Integrate permission middleware
 
-        self.console.print(f"🤖 使用模型: {model_name}", style="cyan")
-        model = AnthropicModel(model_name, provider=provider)
-        # Create agent with provider if available
-
-        self.commit_agent = Agent(
-            model,
-            output_type=CommitMessage,
-            system_prompt="""你是一个专业的 Git 提交信息生成助手。请根据提供的代码变更信息生成符合规范的提交信息。
+Please generate concise, accurate, and standardized commit messages."""
+        else:  # Default to Chinese
+            return """你是一个专业的 Git 提交信息生成助手。请根据提供的代码变更信息生成符合规范的提交信息。
 
 提交信息格式规范：
 - 类型(type): feat, fix, refactor, docs, style, test, chore
@@ -150,13 +151,51 @@ feat(auth): 添加用户认证功能
 - 添加登录/注册接口
 - 集成权限中间件
 
-请生成简洁、准确、符合规范的提交信息。""",
-        )
+请生成简洁、准确、符合规范的提交信息。"""
 
-        self.mr_agent = Agent(
-            model,
-            output_type=MRContent,
-            system_prompt="""你是一个专业的 Merge Request 内容生成助手。请根据提供的代码变更信息和提交记录生成简洁的标题和详细的描述。
+    def _get_mr_prompt(self) -> str:
+        """Get MR content generation prompt based on language configuration."""
+        if self.language == "en":
+            return """You are a professional Merge Request content generation assistant. Please generate concise titles and detailed descriptions based on the provided code change information and commit history.
+
+MR Title Requirements:
+- Concise and clear, not exceeding 60 characters
+- Accurately summarize the main changes
+- Use English for titles
+- Avoid overly technical terms
+- Highlight the value and purpose of changes
+
+MR Description Requirements:
+- Detailed explanation of change background and purpose
+- List main changes and features
+- Explain impact scope
+- Provide testing suggestions or verification methods
+- Use English for descriptions
+- Clear format, easy to read
+- Use Markdown format
+
+Description Structure:
+## Background
+Explain why this change is needed
+
+## Main Changes
+List specific features or modifications
+
+## Impact Scope
+Explain which modules or functions will be affected
+
+## Testing Suggestions
+Provide suggestions on how to verify the changes
+
+Example Titles:
+- Add user authentication functionality
+- Fix login page display issue
+- Optimize database query performance
+- Refactor order processing logic
+
+Please generate both concise accurate titles and detailed structured descriptions."""
+        else:  # Default to Chinese
+            return """你是一个专业的 Merge Request 内容生成助手。请根据提供的代码变更信息和提交记录生成简洁的标题和详细的描述。
 
 MR 标题要求：
 - 简洁明了，不超过60个字符
@@ -193,7 +232,39 @@ MR 描述要求：
 - 优化数据库查询性能
 - 重构订单处理逻辑
 
-请同时生成简洁准确的标题和详细结构化的描述。""",
+请同时生成简洁准确的标题和详细结构化的描述。"""
+
+    def _setup_commit_agent(self):
+        """Setup commit message generation agent using settings."""
+        # Get model from settings, default to gpt-4o-mini
+        model_name: str = self.settings.get("model", "gpt-4o-mini")
+
+        # Get environment settings
+        env_settings = self.settings.get("env", {})
+
+        # Anthropic provider
+        api_key = env_settings.get("ANTHROPIC_AUTH_TOKEN")
+        base_url = env_settings.get("ANTHROPIC_BASE_URL")
+
+        if api_key:
+            provider = AnthropicProvider(api_key=api_key, base_url=base_url)
+        else:
+            provider = None
+
+        self.console.print(f"🤖 使用模型: {model_name}", style="cyan")
+        model = AnthropicModel(model_name, provider=provider)
+        # Create agent with provider if available
+
+        self.commit_agent = Agent(
+            model,
+            output_type=CommitMessage,
+            system_prompt=self._get_commit_prompt(),
+        )
+
+        self.mr_agent = Agent(
+            model,
+            output_type=MRContent,
+            system_prompt=self._get_mr_prompt(),
         )
 
     def _load_config(self) -> dict:
@@ -219,6 +290,12 @@ MR 描述要求：
         """Create default pyto.toml configuration file."""
         default_config = """# PyTo Code Configuration File
 # PyTo Code - A lightweight, extensible Python-first Code Agent framework
+
+[general]
+# 语言配置 (language configuration)
+# 支持的语言: "zh" (中文), "en" (英文)
+# Supported languages: "zh" (Chinese), "en" (English)
+language = "zh"
 
 [gitflow]
 # GitLab 配置
@@ -545,16 +622,12 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
         result = self.run_command(["git", "status"])
         self.console.print(result.stdout)
 
-        if not Confirm.ask("是否要添加所有更改到暂存区？", default=True):
-            # Let user specify files interactively
-            files_input = self.console.input("请输入要暂存的文件路径（用空格分隔）: ")
-            if files_input:
-                files = files_input.split()
-                for file_path in files:
-                    self.run_command(["git", "add", file_path])
-            else:
-                self.console.print("❌ 未暂存任何文件", style="red")
-                return False
+        # Let user specify files interactively
+        files_input = self.console.input("请输入要暂存的文件路径（用空格分隔，留空暂存所有）: ")
+        if files_input.strip():
+            files = files_input.split()
+            for file_path in files:
+                self.run_command(["git", "add", file_path])
         else:
             self.run_command(["git", "add", "."])
 
@@ -615,30 +688,56 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
 
     def _fallback_commit_message(self) -> str:
         """Fallback method for manual commit message input."""
-        self.console.print("\n�📝 提交信息规范:", style="cyan")
-        self.console.print("格式: <type>(<scope>): <subject>")
-        self.console.print("类型: feat, fix, refactor, docs, style, test, chore")
-        self.console.print("示例: feat(auth): 添加用户认证功能")
+        if self.language == "en":
+            self.console.print("\n📝 Commit Message Guidelines:", style="cyan")
+            self.console.print("Format: <type>(<scope>): <subject>")
+            self.console.print("Types: feat, fix, refactor, docs, style, test, chore")
+            self.console.print("Example: feat(auth): add user authentication functionality")
 
-        while True:
-            subject = input("\n请输入提交标题: ").strip()
-            if not subject:
-                self.console.print("❌ 提交标题不能为空", style="red")
-                continue
+            while True:
+                subject = input("\nEnter commit title: ").strip()
+                if not subject:
+                    self.console.print("❌ Commit title cannot be empty", style="red")
+                    continue
 
-            body = input("请输入详细描述（可选，按回车跳过）: ").strip()
+                body = input("Enter detailed description (optional, press Enter to skip): ").strip()
 
-            commit_msg = subject
-            if body:
-                commit_msg += f"\n\n{body}"
+                commit_msg = subject
+                if body:
+                    commit_msg += f"\n\n{body}"
 
-            self.console.print("\n📋 提交信息预览:", style="cyan")
-            panel = Panel(commit_msg, title="预览", border_style="yellow")
-            self.console.print(panel)
+                self.console.print("\n📋 Commit Message Preview:", style="cyan")
+                panel = Panel(commit_msg, title="Preview", border_style="yellow")
+                self.console.print(panel)
 
-            if self.confirm("确认使用此提交信息？"):
-                return commit_msg
-            self.console.print("请重新输入...", style="yellow")
+                if self.confirm("Confirm using this commit message?"):
+                    return commit_msg
+                self.console.print("Please re-enter...", style="yellow")
+        else:  # Default to Chinese
+            self.console.print("\n📝 提交信息规范:", style="cyan")
+            self.console.print("格式: <type>(<scope>): <subject>")
+            self.console.print("类型: feat, fix, refactor, docs, style, test, chore")
+            self.console.print("示例: feat(auth): 添加用户认证功能")
+
+            while True:
+                subject = input("\n请输入提交标题: ").strip()
+                if not subject:
+                    self.console.print("❌ 提交标题不能为空", style="red")
+                    continue
+
+                body = input("请输入详细描述（可选，按回车跳过）: ").strip()
+
+                commit_msg = subject
+                if body:
+                    commit_msg += f"\n\n{body}"
+
+                self.console.print("\n📋 提交信息预览:", style="cyan")
+                panel = Panel(commit_msg, title="预览", border_style="yellow")
+                self.console.print(panel)
+
+                if self.confirm("确认使用此提交信息？"):
+                    return commit_msg
+                self.console.print("请重新输入...", style="yellow")
 
     def get_commit_message(self) -> str:
         """Get commit message (now using LLM generation)."""
@@ -756,50 +855,96 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
 
     def _fallback_mr_content(self, branch: str) -> Tuple[str, str]:
         """Fallback method for manual MR title and description input."""
-        self.console.print("\n📝 MR 内容规范:", style="cyan")
-        self.console.print("标题要求:")
-        self.console.print("- 简洁明了，不超过60个字符")
-        self.console.print("- 准确概括变更内容")
-        self.console.print("- 使用中文标题")
-        self.console.print("描述要求:")
-        self.console.print("- 详细说明变更的背景和目的")
-        self.console.print("- 列出主要的变更内容和功能")
-        self.console.print("- 说明变更的影响范围")
-        self.console.print("- 提供测试建议或验证方法")
-        self.console.print("- 使用 Markdown 格式")
+        if self.language == "en":
+            self.console.print("\n📝 MR Content Guidelines:", style="cyan")
+            self.console.print("Title Requirements:")
+            self.console.print("- Concise and clear, not exceeding 60 characters")
+            self.console.print("- Accurately summarize changes")
+            self.console.print("- Use English titles")
+            self.console.print("Description Requirements:")
+            self.console.print("- Detailed explanation of change background and purpose")
+            self.console.print("- List main changes and features")
+            self.console.print("- Explain impact scope")
+            self.console.print("- Provide testing suggestions or verification methods")
+            self.console.print("- Use Markdown format")
 
-        while True:
-            # Get title
-            title = input("\n请输入 MR 标题: ").strip()
-            if not title:
-                self.console.print("❌ MR 标题不能为空", style="red")
-                continue
-
-            # Get description
-            self.console.print("\n请输入 MR 描述（支持 Markdown，输入 'END' 结束）:")
-            lines = []
             while True:
-                line = input()
-                if line.strip() == "END":
-                    break
-                lines.append(line)
+                # Get title
+                title = input("\nEnter MR title: ").strip()
+                if not title:
+                    self.console.print("❌ MR title cannot be empty", style="red")
+                    continue
 
-            description = "\n".join(lines).strip()
-            if not description:
-                self.console.print("❌ MR 描述不能为空", style="red")
-                continue
+                # Get description
+                self.console.print("\nEnter MR description (Markdown supported, type 'END' to finish):")
+                lines = []
+                while True:
+                    line = input()
+                    if line.strip() == "END":
+                        break
+                    lines.append(line)
 
-            # Preview
-            self.console.print("\n📋 MR 内容预览:", style="cyan")
-            title_panel = Panel(title, title="标题预览", border_style="yellow")
-            self.console.print(title_panel)
+                description = "\n".join(lines).strip()
+                if not description:
+                    self.console.print("❌ MR description cannot be empty", style="red")
+                    continue
 
-            desc_panel = Panel(description, title="描述预览", border_style="yellow")
-            self.console.print(desc_panel)
+                # Preview
+                self.console.print("\n📋 MR Content Preview:", style="cyan")
+                title_panel = Panel(title, title="Title Preview", border_style="yellow")
+                self.console.print(title_panel)
 
-            if self.confirm("确认使用此 MR 标题和描述？"):
-                return title, description
-            self.console.print("请重新输入...", style="yellow")
+                desc_panel = Panel(description, title="Description Preview", border_style="yellow")
+                self.console.print(desc_panel)
+
+                if self.confirm("Confirm using this MR title and description?"):
+                    return title, description
+                self.console.print("Please re-enter...", style="yellow")
+        else:  # Default to Chinese
+            self.console.print("\n📝 MR 内容规范:", style="cyan")
+            self.console.print("标题要求:")
+            self.console.print("- 简洁明了，不超过60个字符")
+            self.console.print("- 准确概括变更内容")
+            self.console.print("- 使用中文标题")
+            self.console.print("描述要求:")
+            self.console.print("- 详细说明变更的背景和目的")
+            self.console.print("- 列出主要的变更内容和功能")
+            self.console.print("- 说明变更的影响范围")
+            self.console.print("- 提供测试建议或验证方法")
+            self.console.print("- 使用 Markdown 格式")
+
+            while True:
+                # Get title
+                title = input("\n请输入 MR 标题: ").strip()
+                if not title:
+                    self.console.print("❌ MR 标题不能为空", style="red")
+                    continue
+
+                # Get description
+                self.console.print("\n请输入 MR 描述（支持 Markdown，输入 'END' 结束）:")
+                lines = []
+                while True:
+                    line = input()
+                    if line.strip() == "END":
+                        break
+                    lines.append(line)
+
+                description = "\n".join(lines).strip()
+                if not description:
+                    self.console.print("❌ MR 描述不能为空", style="red")
+                    continue
+
+                # Preview
+                self.console.print("\n📋 MR 内容预览:", style="cyan")
+                title_panel = Panel(title, title="标题预览", border_style="yellow")
+                self.console.print(title_panel)
+
+                desc_panel = Panel(description, title="描述预览", border_style="yellow")
+                self.console.print(desc_panel)
+
+                if self.confirm("确认使用此 MR 标题和描述？"):
+                    return title, description
+                self.console.print("请重新输入...", style="yellow")
 
     def get_mr_content(self, branch: str) -> Tuple[str, str]:
         """Get MR title and description (now using LLM generation)."""
