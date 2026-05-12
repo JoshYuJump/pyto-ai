@@ -36,10 +36,7 @@ class GitWorkflow:
     """Git workflow automation for commit and MR creation."""
 
     def __init__(self):
-        self.console = Console(
-            force_terminal=True,
-            legacy_windows=False
-        )
+        self.console = Console(force_terminal=True, legacy_windows=False)
         self.config = self._load_config()
         self.settings = self._load_settings()
 
@@ -49,7 +46,7 @@ class GitWorkflow:
         self.gitlab_port = gitflow_config.get("gitlab_port", "")
         self.repo_name = gitflow_config.get("repo_name", "")
         self.develop_branch = gitflow_config.get("develop_branch", "develop")
-        
+
         # 读取语言配置
         general_config = self.config.get("general", {})
         self.language = general_config.get("language", "zh")  # 默认中文
@@ -623,13 +620,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
         self.console.print(result.stdout)
 
         # Let user specify files interactively
-        files_input = self.console.input("请输入要暂存的文件路径（用空格分隔，留空暂存所有）: ")
-        if files_input.strip():
-            files = files_input.split()
-            for file_path in files:
-                self.run_command(["git", "add", file_path])
-        else:
-            self.run_command(["git", "add", "."])
+        self.run_command(["git", "add", "."])
 
         self.console.print("✅ 文件已暂存", style="green")
         return True
@@ -675,11 +666,12 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             panel = Panel(commit_msg, title="AI 生成", border_style="green")
             self.console.print(panel)
 
-            # Ask for user confirmation
-            if self.confirm("是否使用 AI 生成的提交信息？"):
-                return commit_msg
-            else:
-                return self._fallback_commit_message()
+            return commit_msg
+            # # Ask for user confirmation
+            # if self.confirm("是否使用 AI 生成的提交信息？"):
+            #     return commit_msg
+            # else:
+            #     return self._fallback_commit_message()
 
         except Exception as e:
             self.console.print(f"⚠️  AI 生成提交信息失败: {e}", style="yellow")
@@ -692,7 +684,9 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             self.console.print("\n📝 Commit Message Guidelines:", style="cyan")
             self.console.print("Format: <type>(<scope>): <subject>")
             self.console.print("Types: feat, fix, refactor, docs, style, test, chore")
-            self.console.print("Example: feat(auth): add user authentication functionality")
+            self.console.print(
+                "Example: feat(auth): add user authentication functionality"
+            )
 
             while True:
                 subject = input("\nEnter commit title: ").strip()
@@ -700,7 +694,9 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                     self.console.print("❌ Commit title cannot be empty", style="red")
                     continue
 
-                body = input("Enter detailed description (optional, press Enter to skip): ").strip()
+                body = input(
+                    "Enter detailed description (optional, press Enter to skip): "
+                ).strip()
 
                 commit_msg = subject
                 if body:
@@ -842,11 +838,12 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             desc_panel = Panel(mr_description, title="描述", border_style="green")
             self.console.print(desc_panel)
 
-            # Ask for user confirmation
-            if self.confirm("是否使用 AI 生成的 MR 标题和描述？"):
-                return mr_title, mr_description
-            else:
-                return self._fallback_mr_content(branch)
+            return mr_title, mr_description
+            # # Ask for user confirmation
+            # if self.confirm("是否使用 AI 生成的 MR 标题和描述？"):
+            #     return mr_title, mr_description
+            # else:
+            #     return self._fallback_mr_content(branch)
 
         except Exception as e:
             self.console.print(f"⚠️  AI 生成 MR 内容失败: {e}", style="yellow")
@@ -862,7 +859,9 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             self.console.print("- Accurately summarize changes")
             self.console.print("- Use English titles")
             self.console.print("Description Requirements:")
-            self.console.print("- Detailed explanation of change background and purpose")
+            self.console.print(
+                "- Detailed explanation of change background and purpose"
+            )
             self.console.print("- List main changes and features")
             self.console.print("- Explain impact scope")
             self.console.print("- Provide testing suggestions or verification methods")
@@ -876,7 +875,9 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                     continue
 
                 # Get description
-                self.console.print("\nEnter MR description (Markdown supported, type 'END' to finish):")
+                self.console.print(
+                    "\nEnter MR description (Markdown supported, type 'END' to finish):"
+                )
                 lines = []
                 while True:
                     line = input()
@@ -894,7 +895,9 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                 title_panel = Panel(title, title="Title Preview", border_style="yellow")
                 self.console.print(title_panel)
 
-                desc_panel = Panel(description, title="Description Preview", border_style="yellow")
+                desc_panel = Panel(
+                    description, title="Description Preview", border_style="yellow"
+                )
                 self.console.print(desc_panel)
 
                 if self.confirm("Confirm using this MR title and description?"):
@@ -921,7 +924,9 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                     continue
 
                 # Get description
-                self.console.print("\n请输入 MR 描述（支持 Markdown，输入 'END' 结束）:")
+                self.console.print(
+                    "\n请输入 MR 描述（支持 Markdown，输入 'END' 结束）:"
+                )
                 lines = []
                 while True:
                     line = input()
