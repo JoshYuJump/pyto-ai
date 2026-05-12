@@ -1062,6 +1062,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             result = self.run_command(cmd)
 
             # Extract MR number from output
+            self.console.print("result.stdout: %s" % result.stdout)
 
             mr_match = re.search(r"!(\d+)", result.stdout)
             if mr_match:
