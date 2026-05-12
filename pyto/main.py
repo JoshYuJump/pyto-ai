@@ -1,5 +1,9 @@
 """PyTo Code - CLI."""
 
+import sys
+
+sys.stdout.reconfigure(encoding="utf-8")
+
 import argparse
 import sys
 from pathlib import Path
