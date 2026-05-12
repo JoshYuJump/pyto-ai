@@ -826,8 +826,8 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
 
             # Generate MR content using LLM
             result = await self.mr_agent.run(context)
-            mr_title = result.output.mr_title
-            mr_description = result.output.mr_description
+            mr_title = result.output.title
+            mr_description = result.output.description
 
             # Display generated title and description
             self.console.print("\n🤖 AI 生成的 MR 标题:", style="cyan")
