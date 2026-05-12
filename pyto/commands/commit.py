@@ -575,9 +575,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             self.console.print(f"\n📂 目录改动分布:", style="yellow")
             for dir_path, count in file_analysis["directory_changes"].items():
                 if count > 3:  # Only show directories with significant changes
-                    risk_indicator = (
-                        "⚠️" if count > self.file_change_threshold else "✅"
-                    )
+                    risk_indicator = "⚠️" if count > self.file_change_threshold else "✅"
                     self.console.print(f"  {risk_indicator} {dir_path}: {count} 个文件")
 
         # Branch age
@@ -1062,25 +1060,15 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             result = self.run_command(cmd)
 
             # Extract MR number from output
-            self.console.print("result.stdout: %s" % result.stdout)
-
-            mr_match = re.search(r"!(\d+)", result.stdout)
-            if mr_match:
-                mr_number = mr_match.group(1)
-                mr_url = f"http://{self.gitlab_host}:{self.gitlab_port}/{self.repo_name}/-/merge_requests/{mr_number}"
-
-                # Auto-open browser
-                try:
-                    webbrowser.open(mr_url)
-                    self.console.print(
-                        f"🌐 已自动打开 MR 页面: {mr_url}", style="green"
-                    )
-                except:  # noqa: E722
-                    self.console.print(f"📎 MR 链接: {mr_url}", style="cyan")
-
-                return f"[MR !{mr_number}: {title}]({mr_url})"
-
-            self.console.print("⚠️  无法获取 MR 编号", style="yellow")
+            #
+            self.console.print("MR result.stdout: %s" % result.stdout)
+            mr_url = result.stdout
+            # Auto-open browser
+            try:
+                webbrowser.open(mr_url)
+                self.console.print(f"🌐 已自动打开 MR 页面: {mr_url}", style="green")
+            except:  # noqa: E722
+                self.console.print(f"📎 MR 链接: {mr_url}", style="cyan")
             return None
 
         except subprocess.CalledProcessError as e:
