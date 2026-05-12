@@ -1138,14 +1138,9 @@ def commit(args) -> None:
 
     # Make sync decision based on analysis
     if should_sync:
-        if not workflow.confirm(
-            f"根据分析结果，是否同步 {workflow.develop_branch} 分支？"
-        ):
-            workflow.console.print("⚠️  跳过同步，继续后续流程", style="yellow")
-        else:
-            if not workflow.sync_develop_branch():
-                workflow.console.print("❌ 同步失败，终止流程", style="red")
-                sys.exit(1)
+        if not workflow.sync_develop_branch():
+            workflow.console.print("❌ 同步失败，终止流程", style="red")
+            sys.exit(1)
     else:
         workflow.console.print(f"✅ 跳过同步，直接提交 MR", style="green")
 
