@@ -36,7 +36,10 @@ class GitWorkflow:
     """Git workflow automation for commit and MR creation."""
 
     def __init__(self):
-        self.console = Console()
+        self.console = Console(
+            force_terminal=True,
+            legacy_windows=False
+        )
         self.config = self._load_config()
         self.settings = self._load_settings()
 
