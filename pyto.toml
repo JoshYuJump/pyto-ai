@@ -1,11 +1,17 @@
 # PyTo Code Configuration File
 # PyTo Code - A lightweight, extensible Python-first Code Agent framework
 
+[general]
+# 语言配置 (language configuration)
+# 支持的语言: "zh" (中文), "en" (英文)
+# Supported languages: "zh" (Chinese), "en" (English)
+language = "en"
+
 [gitflow]
 # GitLab 配置
-gitlab_host = "192.168.1.54"
-gitlab_port = "8008"
-repo_name = "yugu/yugu_yxpt"
+gitlab_host = "your.gitlab.local"
+gitlab_port = "80"
+repo_name = "repo_path/repo_name"
 
 # 分支配置
 develop_branch = "main"  # GitFlow 中的 develop 分支对应 prepare
