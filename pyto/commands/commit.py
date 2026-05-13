@@ -321,7 +321,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             self.console.print(
                 f"❌ Error running command: {' '.join(cmd)}", style="red"
             )
-            self.console.print(f"STDERR: {res.stderr}", style="red")
+            self.console.print(f"STDERR: {e.stderr}", style="red")
             raise
 
     def confirm(self, message: str) -> bool:
@@ -575,7 +575,9 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             self.console.print(f"\n📂 目录改动分布:", style="yellow")
             for dir_path, count in file_analysis["directory_changes"].items():
                 if count > 3:  # Only show directories with significant changes
-                    risk_indicator = "⚠️" if count > self.file_change_threshold else "✅"
+                    risk_indicator = (
+                        "⚠️" if count > self.file_change_threshold else "✅"
+                    )
                     self.console.print(f"  {risk_indicator} {dir_path}: {count} 个文件")
 
         # Branch age
