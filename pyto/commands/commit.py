@@ -1071,7 +1071,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                 self.console.print(f"🌐 已自动打开 MR 页面: {mr_url}", style="green")
             except:  # noqa: E722
                 self.console.print(f"📎 MR 链接: {mr_url}", style="cyan")
-            return None
+            return mr_url
 
         except subprocess.CalledProcessError as e:
             self.console.print(f"❌ 创建 MR 失败: {e}", style="red")
