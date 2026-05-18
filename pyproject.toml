@@ -27,3 +27,13 @@ dev = [
 
 [project.scripts]
 pyto = "pyto.main:main"
+
+[tool.hatch.build.targets.sdist]
+include = ["pyto"]
+
+[tool.hatch.build.targets.wheel]
+include = ["pyto"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
