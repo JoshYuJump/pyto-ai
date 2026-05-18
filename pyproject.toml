@@ -1,5 +1,5 @@
 [project]
-name = "pyto-code"
+name = "pyto-ai"
 version = "0.1.0"
 description = "A lightweight, extensible Python-first Code Agent framework for code generation, execution, and tooling with LLMs."
 readme = "README.md"
