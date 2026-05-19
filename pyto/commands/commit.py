@@ -464,21 +464,31 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
         return analysis
 
     def get_branch_age_days(self, branch: str) -> int:
-        """Get branch age in days since first commit."""
+        """Get branch age in days since the branch's first unique commit (fallback to branch latest commit)."""
+        upstream = self.develop_branch
         try:
-            # Get the first commit date of the branch
-            cmd = ["git", "log", "--reverse", "--format=%ci", f"origin/{branch}"]
+            # 1) Find the first commit on `branch` that is not in `upstream` (first unique commit)
+            cmd = ["git", "rev-list", "--reverse", branch, "--not", upstream]
             result = self.run_command(cmd)
+            lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+            commit_hash = lines[0] if lines else None
 
-            if result.stdout.strip():
-                first_commit_date = result.stdout.split("\n")[0].strip()
-                first_date = datetime.strptime(first_commit_date.split()[0], "%Y-%m-%d")
-                age_days = (datetime.now() - first_date).days
-                return age_days
+            # 2) If there is no unique commit (branch hasn't diverged), use the branch's latest commit (HEAD)
+            if not commit_hash:
+                cmd = ["git", "rev-parse", f"{branch}"]
+                result = self.run_command(cmd)
+                commit_hash = result.stdout.strip()
+                if not commit_hash:
+                    return 0
 
-            return 0
+            # 3) Read the commit date of that commit
+            cmd = ["git", "show", "-s", "--format=%ci", commit_hash]
+            result = self.run_command(cmd)
+            commit_date_str = result.stdout.splitlines()[0].strip()
+            first_date = datetime.strptime(commit_date_str.split()[0], "%Y-%m-%d")
+            return (datetime.now() - first_date).days
 
-        except (subprocess.CalledProcessError, ValueError):
+        except (subprocess.CalledProcessError, ValueError, IndexError):
             return 0
 
     def should_sync_develop_branch(self, branch: str = None) -> Tuple[bool, dict]:
@@ -983,7 +993,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
 
             # Merge develop into feature branch
             try:
-                self.run_command(["git", "merge", self.develop_branch])
+                self.run_command(["git", "rebase", self.develop_branch])
                 self.console.print(
                     f"✅ 已同步 {self.develop_branch} 分支", style="green"
                 )
