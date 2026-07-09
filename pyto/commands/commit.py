@@ -7,20 +7,19 @@ import re
 import subprocess
 import sys
 import webbrowser
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Any, Dict, List, Optional, Tuple
 
 import toml
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
-from rich.text import Text
 
 
 class CommitMessage(BaseModel):
@@ -566,7 +565,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
         self.console.print("=" * 50, style="blue")
 
         # Commit divergence
-        self.console.print(f"📈 提交差异:", style="yellow")
+        self.console.print("📈 提交差异:", style="yellow")
         self.console.print(
             f"  • {self.develop_branch} 领先: {analysis['target_ahead']} 个提交"
         )
@@ -574,7 +573,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
 
         # File changes
         file_analysis = analysis["file_analysis"]
-        self.console.print(f"\n📁 文件改动:", style="yellow")
+        self.console.print("\n📁 文件改动:", style="yellow")
         self.console.print(f"  • 总计改动文件: {analysis['changed_files_count']}")
         self.console.print(f"  • 核心模块文件: {file_analysis['core_modules']}")
         self.console.print(f"  • 后端文件: {file_analysis['backend_files']}")
@@ -582,7 +581,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
 
         # Directory changes
         if file_analysis["directory_changes"]:
-            self.console.print(f"\n📂 目录改动分布:", style="yellow")
+            self.console.print("\n📂 目录改动分布:", style="yellow")
             for dir_path, count in file_analysis["directory_changes"].items():
                 if count > 3:  # Only show directories with significant changes
                     risk_indicator = (
@@ -591,7 +590,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
                     self.console.print(f"  {risk_indicator} {dir_path}: {count} 个文件")
 
         # Branch age
-        self.console.print(f"\n📅 分支信息:", style="yellow")
+        self.console.print("\n📅 分支信息:", style="yellow")
         self.console.print(f"  • 分支存在时间: {analysis['branch_age_days']} 天")
 
         # Recommendation
@@ -602,7 +601,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
             for reason in analysis["reasons"]:
                 self.console.print(f"  • {reason}")
         else:
-            self.console.print(f"\n✅ 可以直接提交 MR，无需同步", style="bold green")
+            self.console.print("\n✅ 可以直接提交 MR，无需同步", style="bold green")
 
         self.console.print("=" * 50, style="blue")
 
@@ -1143,7 +1142,7 @@ def commit(args) -> None:
             workflow.console.print("❌ 同步失败，终止流程", style="red")
             sys.exit(1)
     else:
-        workflow.console.print(f"✅ 跳过同步，直接提交 MR", style="green")
+        workflow.console.print("✅ 跳过同步，直接提交 MR", style="green")
 
     # Step 5: Push to remote
     if not workflow.push_to_remote(current_branch):
