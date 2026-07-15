@@ -2682,9 +2682,9 @@ wheels = [
 ]
 
 [[package]]
-name = "pyto-code"
-version = "0.1.0"
-source = { virtual = "." }
+name = "pyto-ai"
+version = "0.1.1"
+source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "ddgs" },
@@ -2704,7 +2704,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", specifier = ">=0.97.0" },
     { name = "ddgs", specifier = ">=9.14.1" },
-    { name = "pydantic-ai", specifier = ">=0.8.0" },
+    { name = "pydantic-ai", specifier = ">=0.8.0,<2" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "toml", specifier = ">=0.10.2" },

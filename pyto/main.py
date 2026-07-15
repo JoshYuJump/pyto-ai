@@ -4,11 +4,11 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-import argparse
-import sys
-from pathlib import Path
+import argparse  # noqa
+import sys  # noqa
+from pathlib import Path  # noqa
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa
 
 # Load .env
 env_path = Path(__file__).parent / ".env"
