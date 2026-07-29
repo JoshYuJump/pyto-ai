@@ -5,12 +5,12 @@ description = "A lightweight, extensible Python-first Code Agent framework for c
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "anthropic>=0.97.0",
-    "ddgs>=9.14.1",
-    "pydantic-ai>=0.8.0,<2",
-    "python-dotenv>=1.2.2",
-    "rich>=13.0.0",
-    "toml>=0.10.2",
+    "anthropic>=0.119,<1",
+    "ddgs>=9.14,<9.15",
+    "pydantic-ai>=1.107,<2",
+    "python-dotenv>=1.2.2,<2",
+    "rich>=15,<16",
+    "toml>=0.10.2,<1",
 ]
 
 [tool.pytest.ini_options]
