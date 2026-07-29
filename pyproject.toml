@@ -1,13 +1,13 @@
 [project]
 name = "pyto-ai"
-version = "0.2.0"
+version = "0.2.1"
 description = "A lightweight, extensible Python-first Code Agent framework for code generation, execution, and tooling with LLMs."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "anthropic>=0.119,<1",
     "ddgs>=9.14,<9.15",
-    "pydantic-ai>=1.107,<2",
+    "pydantic-ai-slim[anthropic]>=1.107,<2",
     "python-dotenv>=1.2.2,<2",
     "rich>=15,<16",
     "toml>=0.10.2,<1",
