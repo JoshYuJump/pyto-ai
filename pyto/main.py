@@ -26,9 +26,19 @@ def main():
 
     # Add commit subcommand
     commit_parser = subparsers.add_parser(
-        "commit", help="Submit code and create merge request (MR) workflow"
+        "commit", help="Git commit and push"
     )
     commit_parser.add_argument(
+        "--skip-review",
+        action="store_true",
+        help="Skip code review confirmation (not recommended)",
+    )
+
+    # Add submit subcommand
+    submit_parser = subparsers.add_parser(
+        "submit", help="Submit code: commit, push, and create merge request (MR)"
+    )
+    submit_parser.add_argument(
         "--skip-review",
         action="store_true",
         help="Skip code review confirmation (not recommended)",
@@ -47,11 +57,21 @@ def main():
             print("❌ Error: pyto package not found. Please install the package first.")
             print("Run: pip install -e .")
             sys.exit(1)
+    elif args.command == "submit":
+        try:
+            from pyto.commands import submit
+
+            submit(args)
+        except ImportError:
+            print("❌ Error: pyto package not found. Please install the package first.")
+            print("Run: pip install -e .")
+            sys.exit(1)
     elif args.command is None:
         print("PyTo Code - A lightweight, extensible Python-first Code Agent framework")
         print("Use 'pyto --help' for available commands")
         print("Available commands:")
-        print("  commit    Submit code and create merge request (MR) workflow")
+        print("  commit    Git commit and push")
+        print("  submit    Submit code: commit, push, and create merge request (MR)")
     else:
         parser.print_help()
         sys.exit(1)
