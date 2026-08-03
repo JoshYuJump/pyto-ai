@@ -1,6 +1,6 @@
 [project]
 name = "pyto-ai"
-version = "0.3.0"
+version = "0.3.1"
 description = "A lightweight, extensible Python-first Code Agent framework for code generation, execution, and tooling with LLMs."
 readme = "README.md"
 requires-python = ">=3.10"

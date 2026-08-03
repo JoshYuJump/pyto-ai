@@ -9,6 +9,8 @@ from typing import Optional, Tuple
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
+from rich.panel import Panel
+
 from .commit import GitWorkflow
 
 
