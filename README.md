@@ -1,8 +1,8 @@
-# PyTo Code
+# PyTo AI
 
 A lightweight, extensible Python-first Code Agent framework for code generation, execution, and tooling with LLMs.
 
-PyTo Code automates your Git workflow by using LLMs to generate commit messages and merge request descriptions. It integrates with GitLab via `glab` CLI and supports bilingual (Chinese/English) interfaces.
+PyTo AI automates your Git workflow by using LLMs to generate commit messages and merge request descriptions. It integrates with GitLab via `glab` CLI and supports bilingual (Chinese/English) interfaces.
 
 ## Features
 
