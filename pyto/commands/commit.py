@@ -1,22 +1,19 @@
 """Git commit and push workflow implementation."""
 
 import asyncio
-import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 from subprocess import CompletedProcess
-from typing import Any, Dict
 
 import toml
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent
-from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.providers.anthropic import AnthropicProvider
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
+
+from pyto.llm import create_agent
 
 
 class CommitMessage(BaseModel):
@@ -29,7 +26,6 @@ class GitWorkflow:
     def __init__(self):
         self.console = Console(force_terminal=True, legacy_windows=False)
         self.config = self._load_config()
-        self.settings = self._load_settings()
 
         gitflow_config = self.config.get("gitflow", {})
         self.gitlab_host = gitflow_config.get("gitlab_host", "")
@@ -46,52 +42,10 @@ class GitWorkflow:
         self.file_change_threshold = 10
         self.long_lived_branch_days = 14
 
-        self._setup_commit_agent()
-
-    def _get_settings_path(self) -> Path:
-        """Get the path to the settings.json file."""
-        home_dir = Path.home()
-        pyto_dir = home_dir / ".pyto"
-        pyto_dir.mkdir(exist_ok=True)
-        return pyto_dir / "settings.json"
-
-    def _load_settings(self) -> Dict[str, Any]:
-        """Load LLM settings from ~/.pyto/settings.json."""
-        settings_path = self._get_settings_path()
-        self.console.print(f"Loading settings from: {settings_path}", style="cyan")
-
-        if not settings_path.exists():
-            self.console.print(
-                "⚠️  未找到 ~/.pyto/settings.json 配置文件", style="yellow"
-            )
-            self.console.print("正在创建默认配置文件...", style="cyan")
-            self._create_default_settings(settings_path)
-            self.console.print(
-                "✅ 已创建 ~/.pyto/settings.json 配置文件", style="green"
-            )
-            self.console.print("📝 请根据需要更新配置文件中的 LLM 设置", style="yellow")
-
-        try:
-            with open(settings_path, "r", encoding="utf-8") as f:
-                settings = json.load(f)
-            return settings
-        except Exception as e:
-            self.console.print(f"❌ 读取设置文件失败: {e}", style="red")
-            self.console.print("使用默认设置", style="yellow")
-            return {}
-
-    def _create_default_settings(self, settings_path: Path) -> None:
-        """Create default ~/.pyto/settings.json configuration file."""
-        default_settings = {
-            "env": {
-                "ANTHROPIC_AUTH_TOKEN": "your-anthropic-token-here",
-                "ANTHROPIC_BASE_URL": "your-anthropic-base-url-here",
-            },
-            "model": "minimax-m2.7",
-        }
-
-        with open(settings_path, "w", encoding="utf-8") as f:
-            json.dump(default_settings, f, indent=2, ensure_ascii=False)
+        self.commit_agent = create_agent(
+            output_type=CommitMessage,
+            system_prompt=self._get_commit_prompt(),
+        )
 
     def _get_commit_prompt(self) -> str:
         """Get commit message generation prompt based on language configuration."""
@@ -131,28 +85,6 @@ feat(auth): 添加用户认证功能
 - 集成权限中间件
 
 请生成简洁、准确、符合规范的提交信息。"""
-
-    def _setup_commit_agent(self):
-        """Setup commit message generation agent using settings."""
-        model_name: str = self.settings.get("model", "gpt-4o-mini")
-
-        env_settings = self.settings.get("env", {})
-        api_key = env_settings.get("ANTHROPIC_AUTH_TOKEN")
-        base_url = env_settings.get("ANTHROPIC_BASE_URL")
-
-        if api_key:
-            provider = AnthropicProvider(api_key=api_key, base_url=base_url)
-        else:
-            provider = None
-
-        self.console.print(f"🤖 使用模型: {model_name}", style="cyan")
-        self.model = AnthropicModel(model_name, provider=provider)
-
-        self.commit_agent = Agent(
-            self.model,
-            output_type=CommitMessage,
-            system_prompt=self._get_commit_prompt(),
-        )
 
     def _load_config(self) -> dict:
         """Load configuration from pyto.toml."""
@@ -348,7 +280,7 @@ develop_branch = "develop"  # GitFlow 中的 develop 分支
         try:
             cmd = ["git", "rev-list", "--reverse", branch, "--not", upstream]
             result = self.run_command(cmd)
-            lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+            lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]  # noqa
             commit_hash = lines[0] if lines else None
 
             if not commit_hash:
