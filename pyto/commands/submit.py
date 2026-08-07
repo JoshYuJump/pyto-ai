@@ -7,9 +7,9 @@ import webbrowser
 from typing import Optional, Tuple
 
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent
-
 from rich.panel import Panel
+
+from pyto.llm import create_agent
 
 from .commit import GitWorkflow
 
@@ -21,6 +21,13 @@ class MRContent(BaseModel):
 
 class SubmitWorkflow(GitWorkflow):
     """Git workflow automation for commit, push, and MR creation."""
+
+    def __init__(self):
+        super().__init__()
+        self.mr_agent = create_agent(
+            output_type=MRContent,
+            system_prompt=self._get_mr_prompt(),
+        )
 
     def _get_mr_prompt(self) -> str:
         """Get MR content generation prompt based on language configuration."""
@@ -102,15 +109,6 @@ MR 描述要求：
 - 重构订单处理逻辑
 
 请同时生成简洁准确的标题和详细结构化的描述。"""
-
-    def _setup_commit_agent(self):
-        super()._setup_commit_agent()
-
-        self.mr_agent = Agent(
-            self.model,
-            output_type=MRContent,
-            system_prompt=self._get_mr_prompt(),
-        )
 
     async def generate_mr_content(self, branch: str) -> Tuple[str, str]:
         """Generate MR title and description using LLM based on branch changes and commit history."""
