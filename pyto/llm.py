@@ -6,7 +6,7 @@ from typing import Any, Dict, Type
 
 from pydantic import BaseModel
 from pydantic_ai import Agent
-from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from rich.console import Console
 
@@ -84,6 +84,10 @@ def create_agent(
         provider = None
 
     console.print(f"🤖 使用模型: {model_name}", style="cyan")
-    model = AnthropicModel(model_name, provider=provider)
+    model = AnthropicModel(
+        model_name,
+        provider=provider,
+        settings=AnthropicModelSettings(anthropic_thinking={"type": "disabled"}),
+    )
 
     return Agent(model, output_type=output_type, system_prompt=system_prompt)
